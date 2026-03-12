@@ -31,22 +31,67 @@ The typing is **undetectable** — `uinput` generates real kernel input events t
 - **espeak-ng:** Voice feedback (optional but recommended)
 - **Gemini API Key:** From [Google AI Studio](https://aistudio.google.com/)
 
+## 📦 App Setup
+
+The CodeTantra SEA app binary is **not included** in this repo (too large for GitHub). You need to download and extract it yourself.
+
+### Step 1: Download the `.deb` Package
+
+Get the CodeTantra SEA installer from your institution's portal. The file will be named something like:
+```
+codetantra-sea_4.3.0_amd64.deb
+```
+
+### Step 2: Extract the App
+
+```bash
+# From inside the repo directory:
+mkdir -p app
+dpkg-deb -x /path/to/codetantra-sea_*.deb app/
+```
+
+This extracts the Electron app to `app/opt/CodeTantra SEA/`.
+
+### Step 3: Verify
+
+```bash
+ls -la "app/opt/CodeTantra SEA/codetantra-sea"
+```
+
+You should see the `codetantra-sea` binary (~194 MB). If the binary is at a different path, update the `APP_EXECUTABLE` variable in `src/autopilot.py`.
+
+### Custom App Path
+
+If your app version has a different directory structure, edit the path in `src/autopilot.py`:
+
+```python
+# Line ~37 — change this to match your extracted path
+APP_EXECUTABLE = os.path.join(REPO_ROOT, "app/opt/CodeTantra SEA/codetantra-sea")
+```
+
 ## 🚀 Quick Start
 
 ### 1. Clone & Setup
 ```bash
-git clone https://github.com/yourusername/codetantra-autopilot.git
-cd codetantra-autopilot
+git clone https://github.com/Alaqmar-morawala/Codetantra-Automation.git
+cd Codetantra-Automation
 chmod +x setup.sh run.sh
 ./setup.sh
 ```
 
-### 2. Set Your API Key
+### 2. Download & Extract the App
+```bash
+# Place your .deb file in the repo, then:
+mkdir -p app
+dpkg-deb -x codetantra-sea_*.deb app/
+```
+
+### 3. Set Your API Key
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key-here"
 ```
 
-### 3. Run
+### 4. Run
 ```bash
 ./run.sh
 ```
