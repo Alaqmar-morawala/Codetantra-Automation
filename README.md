@@ -39,7 +39,7 @@ The CodeTantra SEA app binary is **not included** in this repo (too large for Gi
 
 Get the CodeTantra SEA installer from your institution's portal. The file will be named something like:
 ```
-codetantra-sea_4.3.0_amd64.deb
+codetantra-sea_4.3.1_amd64.deb
 ```
 
 ### Step 2: Extract the App
