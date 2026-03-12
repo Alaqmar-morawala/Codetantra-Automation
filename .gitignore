@@ -1,0 +1,22 @@
+# Runtime
+config/
+logs/
+__pycache__/
+*.pyc
+
+# App binary (too large for git — download from Releases)
+app/
+
+# System
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Crash dumps
+*.dmp
+*.core

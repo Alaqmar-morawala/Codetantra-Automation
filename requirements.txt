@@ -1,0 +1,3 @@
+frida-tools
+evdev
+google-generativeai
