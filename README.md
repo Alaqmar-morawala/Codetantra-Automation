@@ -31,7 +31,49 @@ The typing is **undetectable** — `uinput` generates real kernel input events t
 - **espeak-ng:** Voice feedback (optional but recommended)
 - **Gemini API Key:** From [Google AI Studio](https://aistudio.google.com/)
 
-## 📦 App Setup
+## 🚀 Quick Start (Zero-to-Hero for Ubuntu)
+
+Follow these exact steps to get up and running on a fresh Ubuntu machine:
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Alaqmar-morawala/Codetantra-Automation.git
+cd Codetantra-Automation
+```
+
+### 2. Extract the CodeTantra App
+The CodeTantra SEA app binary is **not included** in this repo because it exceeds GitHub's file size limits. Download the `.deb` installer (e.g., `codetantra-sea_4.3.0_amd64.deb`) from your institution and extract it directly into the repo:
+```bash
+# Create the app directory
+mkdir -p app
+
+# Extract the .deb file into the app folder (adjust the path if the .deb is named differently)
+dpkg-deb -x ~/Downloads/codetantra-sea_*_amd64.deb app/
+```
+
+### 3. Run the Setup Script
+This script installs Node.js, Python 3, pip, required system tools (`xdotool`, `xclip`, `espeak-ng`), and configures the virtual keyboard (`uinput`) permissions.
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### 4. Provide your AI Key
+Export your Gemini API key so the AI solver can use it:
+```bash
+export GEMINI_API_KEY="your-gemini-api-key-here"
+```
+
+### 5. Launch the Autopilot!
+Use the wrapper script to launch Frida, inject the bypass patches, and start the voice-guided automation:
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+---
+
+## 📦 Manual App Setup
 
 The CodeTantra SEA app binary is **not included** in this repo (too large for GitHub). You need to download and extract it yourself.
 
