@@ -263,6 +263,22 @@ class HumanTyper:
     # Editing simulation behaviors
     # ═══════════════════════════════════════
 
+    def clear_editor_safe(self):
+        """Safely moves cursor to the end of the file, bypassing read-only boilerplates."""
+        time.sleep(random.uniform(0.3, 0.8))
+        # Ctrl + End to jump to absolute bottom
+        self._press_nav_key(e.KEY_END, with_ctrl=True)
+        time.sleep(random.uniform(0.2, 0.4))
+        # Extra safety: spam down arrow 5 times just in case
+        for _ in range(5):
+            self._press_nav_key(e.KEY_DOWN)
+            time.sleep(0.05)
+        # Hit enter twice to start fresh lines
+        self._press_key(e.KEY_ENTER)
+        time.sleep(0.1)
+        self._press_key(e.KEY_ENTER)
+        time.sleep(0.2)
+
     def _do_cursor_review(self):
         """Simulate reviewing previous lines (arrow up, look, arrow down back)."""
         ups = random.randint(1, 4)

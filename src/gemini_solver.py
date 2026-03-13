@@ -33,20 +33,20 @@ class GeminiSolver:
 
 Your task:
 1. Extract the actual programming question from the noisy text
-2. Identify the programming language required (from file extensions like .py, .c, .cpp, .java mentioned, or from the code template/boilerplate)
-3. Write a COMPLETE, WORKING solution
+2. FIRST, determine if this is a Multiple Choice Question (MCQ). If you see options like A), B), C), D) or radio button markers, reply STRICTLY and EXCLUSIVELY with the text:
+IS_MCQ
+3. If it is NOT an MCQ, identify the programming language required and write a COMPLETE, WORKING solution.
 
-CRITICAL RULES:
+CRITICAL RULES FOR CODING SOLUTIONS:
 - Output ONLY the solution code, no explanations, no markdown fences
 - Do NOT include ANY comments in the code (no //, no #, no /* */, no docstrings)
 - The code must be complete and runnable as-is
 - Handle all edge cases mentioned in the problem
 - Follow the exact input/output format specified in the problem
 - If sample test cases are provided, make sure your solution passes them
+- IMPORTANT: The editor already contains fixed, read-only boilerplate (like the class declaration `public class Main { ... }` or `import` statements). Do NOT output the outer class wrappers or imports again! Output ONLY the inner functions, inner logic, or `main` block contents that need to be typed inside the existing boilerplate.
 - For C, C++, Java: do NOT add extra spaces or indentation at the start of lines unless inside a block (if/for/while/function body)
-- For Python: use standard 4-space indentation only where syntactically required
-- Keep the code minimal and clean - no blank lines between statements unless necessary
-- If there's existing boilerplate/template code, incorporate it into your solution"""
+- Keep the code minimal and clean - no blank lines between statements unless necessary"""
 
     def __init__(self, api_key=None, model="gemini-2.5-flash"):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")

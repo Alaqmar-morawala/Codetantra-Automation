@@ -186,21 +186,14 @@ def extract_text(wid, retries=2):
 # ═══════════════════════════════════════
 # Editor operations
 # ═══════════════════════════════════════
-def clear_editor(wid):
-    """Clear the code editor content."""
-    click_editor(wid)
-    time.sleep(0.3)
-    subprocess.run(["xdotool", "key", "--window", wid, "ctrl+a"], timeout=3, capture_output=True)
-    time.sleep(0.2)
-    subprocess.run(["xdotool", "key", "--window", wid, "Delete"], timeout=3, capture_output=True)
-    time.sleep(0.3)
-
-
 def type_solution(wid, code):
-    """Type solution into the editor using human-like timing."""
+    """Type solution into the editor using human-like timing safely."""
     click_editor(wid)
     time.sleep(0.3)
-    clear_editor(wid)
+    
+    # Safe navigational clear instead of destructive Ctrl+A -> Delete
+    typer = HumanTyper(wpm_target=WPM_TARGET, error_rate=ERROR_RATE)
+    typer.clear_editor_safe()
     time.sleep(0.5)
 
     typer = HumanTyper(wpm_target=WPM_TARGET, error_rate=ERROR_RATE)
@@ -338,6 +331,14 @@ def autopilot():
                 speak("Gemini failed. Click next. Auto-continuing in 8 seconds.")
                 clog("  ✗ No solution")
                 consecutive_failures += 1
+                clog("  ⏳ Waiting 8s for you to click Next...")
+                time.sleep(8)
+                continue
+
+            # Special MCQ Skip Logic
+            if code.strip() == "IS_MCQ":
+                clog("  ⚠ MULTIPLE CHOICE QUESTION DETECTED — Skipping code automation.")
+                speak("Multiple choice question. Click next. Auto-continuing in 8 seconds.")
                 clog("  ⏳ Waiting 8s for you to click Next...")
                 time.sleep(8)
                 continue
