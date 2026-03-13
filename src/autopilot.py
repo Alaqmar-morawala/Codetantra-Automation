@@ -526,9 +526,12 @@ os.release = () => '6.5.0-generic';
 os.version = () => '#1 SMP PREEMPT_DYNAMIC Ubuntu 6.5.0-27-generic';
 os.type = () => 'Linux';
 
-// Spoof child_process.exec and child_process.execFile for uname / lsb_release
+// Spoof child_process.exec and child_process.execFile for uname / lsb_release / cat
 const originalExec = cp.exec;
 cp.exec = function(command, ...args) {
+    if (command.includes('cat /etc/*-release') || command.includes('cat /etc/os-release') || command.includes('cat /usr/lib/os-release')) {
+        return originalExec('cat /tmp/fake_os_release', ...args);
+    }
     if (command.includes('lsb_release -a') || command.includes('lsb_release -d') || command.includes('lsb_release -r')) {
         return originalExec('echo "Description:\\tUbuntu 22.04.3 LTS\\nRelease:\\t22.04"', ...args);
     }
