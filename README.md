@@ -22,7 +22,7 @@ The typing is **undetectable** — `uinput` generates real kernel input events t
 
 ## 🔧 Prerequisites
 
-- **OS:** Linux (tested on Kali, Ubuntu, Debian)
+- **OS:** Linux (Ubuntu or Debian strongly recommended. Kali Linux may face aggressive app-level OS blocks).
 - **Python:** 3.10+
 - **Frida:** Runtime framework for dynamic instrumentation
 - **uinput:** Linux kernel module for virtual input devices
