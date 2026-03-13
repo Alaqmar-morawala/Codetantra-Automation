@@ -23,6 +23,20 @@ sudo chmod 666 /dev/uinput 2>/dev/null || true
 # Prevent screen blanking
 xset s off -dpms 2>/dev/null || true
 
+# Check for first-run initialization
+APP_BIN="$SCRIPT_DIR/app/opt/CodeTantra SEA/codetantra-sea"
+FIRST_RUN_FLAG="$SCRIPT_DIR/.first_run_done"
+
+if [ ! -f "$FIRST_RUN_FLAG" ] && [ -f "$APP_BIN" ]; then
+    echo "[!] First run detected. Initializing app natively for 8 seconds..."
+    "$APP_BIN" --no-sandbox > /dev/null 2>&1 &
+    APP_PID=$!
+    sleep 8
+    kill -9 $APP_PID 2>/dev/null || true
+    touch "$FIRST_RUN_FLAG"
+    echo "[!] Initialization complete. Starting autopilot..."
+fi
+
 # Keep config intact (clearing causes re-launch when server pushes settings)
 mkdir -p "$SCRIPT_DIR/config" "$SCRIPT_DIR/logs"
 
