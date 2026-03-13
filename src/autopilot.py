@@ -570,15 +570,14 @@ cp.execFile = function(file, cmdArgs, ...cbArgs) {
         "DBUS_SESSION_BUS_ADDRESS": os.environ.get(
             "DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus"
         ),
-        "PATH": f"{fake_bin_dir}:" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "XAUTHORITY": os.environ.get("XAUTHORITY", f"{home}/.Xauthority"),
-        "NODE_OPTIONS": "--require /tmp/fake_os.js",
         "SHELL": "/bin/bash",
     }
 
     clog("[1/3] Spawning app...")
     try:
-        main_pid = device.spawn([APP_EXECUTABLE, "--no-sandbox", "--disable-gpu", "--disable-software-rasterizer"], env=env)
+        main_pid = device.spawn([APP_EXECUTABLE, "--no-sandbox"], env=env)
     except Exception as ex:
         clog(f"FATAL: {ex}")
         sys.exit(1)
