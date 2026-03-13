@@ -473,6 +473,85 @@ if __name__ == "__main__":
     subprocess.run(["pkill", "-9", "-f", "codetantra-sea"], stderr=subprocess.DEVNULL)
     time.sleep(1)
 
+    # ── Spoof OS (Fake Ubuntu to bypass OS check) ──
+    fake_os_str = """PRETTY_NAME="Ubuntu 22.04.3 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+VERSION="22.04.3 LTS (Jammy Jellyfish)"
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+VERSION_CODENAME=jammy
+UBUNTU_CODENAME=jammy
+"""
+    with open("/tmp/fake_os_release", "w") as f:
+        f.write(fake_os_str)
+        
+    fake_bin_dir = "/tmp/fake_bin"
+    os.makedirs(fake_bin_dir, exist_ok=True)
+    lsb_release_path = os.path.join(fake_bin_dir, "lsb_release")
+    with open(lsb_release_path, "w") as f:
+        f.write("#!/bin/bash\nif [[ \"$*\" == *\"-a\"* ]] || [[ \"$*\" == *\"-d\"* ]]; then\n  echo \"Description:\tUbuntu 22.04.3 LTS\"\nelse\n  echo \"Ubuntu\"\nfi\n")
+    os.chmod(lsb_release_path, 0o755)
+
+    # ── Node.js Native Hook (Bypass V8 fs/process/os checks) ──
+    fake_os_js = """
+const fs = require('fs');
+const os = require('os');
+const cp = require('child_process');
+
+// Spoof fs.readFileSync
+const originalReadFileSync = fs.readFileSync;
+fs.readFileSync = function(path, options) {
+    if (path === '/etc/os-release' || path === '/etc/lsb-release' || path === '/usr/lib/os-release') {
+        return originalReadFileSync('/tmp/fake_os_release', options);
+    }
+    return originalReadFileSync(path, options);
+};
+
+// Spoof fs.readFile (async)
+const originalReadFile = fs.readFile;
+fs.readFile = function(path, ...args) {
+    if (path === '/etc/os-release' || path === '/etc/lsb-release' || path === '/usr/lib/os-release') {
+        return originalReadFile('/tmp/fake_os_release', ...args);
+    }
+    return originalReadFile(path, ...args);
+};
+
+// Spoof os module
+os.release = () => '6.5.0-generic';
+os.version = () => '#1 SMP PREEMPT_DYNAMIC Ubuntu 6.5.0-27-generic';
+os.type = () => 'Linux';
+
+// Spoof child_process.exec and child_process.execFile for uname / lsb_release
+const originalExec = cp.exec;
+cp.exec = function(command, ...args) {
+    if (command.includes('lsb_release -a') || command.includes('lsb_release -d') || command.includes('lsb_release -r')) {
+        return originalExec('echo "Description:\\tUbuntu 22.04.3 LTS\\nRelease:\\t22.04"', ...args);
+    }
+    if (command.includes('uname -a') || command.includes('uname -v') || command.includes('uname -r')) {
+        return originalExec('echo "Linux localhost 6.5.0-generic #1 SMP PREEMPT_DYNAMIC Ubuntu 6.5.0-27-generic x86_64 x86_64 x86_64 GNU/Linux"', ...args);
+    }
+    return originalExec(command, ...args);
+};
+
+const originalExecFile = cp.execFile;
+cp.execFile = function(file, cmdArgs, ...cbArgs) {
+    if (file === 'lsb_release' || file === '/usr/bin/lsb_release') {
+        return originalExecFile('/tmp/fake_bin/lsb_release', cmdArgs, ...cbArgs);
+    }
+    if (file === 'uname' || file === '/bin/uname') {
+        return originalExecFile('/bin/echo', ['Linux localhost 6.5.0-generic #1 SMP PREEMPT_DYNAMIC Ubuntu 6.5.0-27-generic x86_64 x86_64 x86_64 GNU/Linux'], ...cbArgs);
+    }
+    return originalExecFile(file, cmdArgs, ...cbArgs);
+};
+"""
+    with open("/tmp/fake_os.js", "w") as f:
+        f.write(fake_os_js.strip())
+
     # ── Frida spawn ──
     device = frida.get_local_device()
     clog(f"Frida: {device.name}")
@@ -488,8 +567,9 @@ if __name__ == "__main__":
         "DBUS_SESSION_BUS_ADDRESS": os.environ.get(
             "DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus"
         ),
-        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "PATH": f"{fake_bin_dir}:" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "XAUTHORITY": os.environ.get("XAUTHORITY", f"{home}/.Xauthority"),
+        "NODE_OPTIONS": "--require /tmp/fake_os.js",
         "SHELL": "/bin/bash",
     }
 

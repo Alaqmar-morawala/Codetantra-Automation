@@ -128,5 +128,30 @@
         log('⚠ libc not found');
     }
 
-    log('Patch v4 loaded.');
+    // ── Pre-hook open/openat to redirect os-release to fake ──
+    const fakeOsRelease = Memory.allocUtf8String("/tmp/fake_os_release");
+
+    function hookOpen(target, pathArgIndex) {
+        let ptr = Module.findExportByName(null, target);
+        if (ptr) {
+            Interceptor.attach(ptr, {
+                onEnter: function(args) {
+                    const path = args[pathArgIndex].readUtf8String();
+                    if (path && (path.endsWith('/etc/os-release') || path.endsWith('/etc/lsb-release') || path.endsWith('/usr/lib/os-release') || path.endsWith('/etc/debian_version'))) {
+                        args[pathArgIndex] = fakeOsRelease;
+                        log('Spoofed ' + path + ' -> (fake) via ' + target);
+                    }
+                }
+            });
+        }
+    }
+
+    hookOpen('open', 0);
+    hookOpen('open64', 0);
+    hookOpen('openat', 1);
+    hookOpen('openat64', 1);
+    hookOpen('fopen', 0);
+    hookOpen('fopen64', 0);
+
+    log('Patch v5 (OS Spoof) loaded.');
 })();
