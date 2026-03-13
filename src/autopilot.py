@@ -578,7 +578,7 @@ cp.execFile = function(file, cmdArgs, ...cbArgs) {
 
     clog("[1/3] Spawning app...")
     try:
-        main_pid = device.spawn([APP_EXECUTABLE, "--no-sandbox"], env=env)
+        main_pid = device.spawn([APP_EXECUTABLE, "--no-sandbox", "--disable-gpu", "--disable-software-rasterizer"], env=env)
     except Exception as ex:
         clog(f"FATAL: {ex}")
         sys.exit(1)
