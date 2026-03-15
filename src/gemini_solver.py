@@ -217,18 +217,19 @@ CRITICAL RULES FOR CODING SOLUTIONS:
         return text
 
     def clean_code(self, code, language=None):
-        """Post-process code: remove markdown fences and dedent common spacing."""
-        import textwrap
+        """Post-process code: strip markdown fences and ALL leading whitespace from lines.
         
-        # Dedent to remove common starting spaces from all lines
-        code = textwrap.dedent(code)
-        
+        This prevents 'double-indentation' in editors that auto-indent on newline.
+        """
         lines = code.split('\n')
         cleaned = []
 
         for line in lines:
-            line = line.rstrip()
-            cleaned.append(line)
+            # lstrip() to remove the 'initial spaces' the user mentioned
+            # rstrip() for cleanliness
+            cleaned_line = line.strip()
+            if cleaned_line or cleaned: # Keep internal empty lines, but avoid leading ones
+                cleaned.append(cleaned_line)
 
         # Remove trailing empty lines
         while cleaned and not cleaned[-1]:
