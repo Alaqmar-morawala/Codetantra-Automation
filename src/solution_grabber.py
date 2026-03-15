@@ -49,14 +49,46 @@ def main():
 
     # Countdown
     for i in range(30, 0, -1):
-        sys.stdout.write(f"\r⏳ Grabbing in {i:2d} seconds... ")
+        sys.stdout.write(f"\r⏳ Automating in {i:2d} seconds... ")
         sys.stdout.flush()
-        if i <= 5:
-            # Subtle beep or alert could go here
-            pass
         time.sleep(1)
 
-    print("\n\n💥 GRABBING NOW...")
+    print("\n\n💥 TRIGGERING EXTRACTION...")
+    
+    # Automate the Copy via xdotool
+    try:
+        # Find window
+        r = subprocess.run(["xdotool", "search", "--name", "CodeTantra"], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            wid = r.stdout.strip().split("\n")[-1]
+            # Get geometry
+            g_out = subprocess.check_output(["xdotool", "getwindowgeometry", wid]).decode('utf-8')
+            width, height = 1920, 1080
+            for line in g_out.split('\n'):
+                if "Geometry" in line:
+                    geom = line.split(":")[1].strip()
+                    width, height = map(int, geom.split("x"))
+            
+            # Target Editor: 70% width, 45% height
+            target_x = int(width * 0.70)
+            target_y = int(height * 0.45)
+
+            # Activate and focus
+            subprocess.run(["xdotool", "windowactivate", "--sync", wid])
+            time.sleep(0.5)
+            # Click Editor area
+            subprocess.run(["xdotool", "mousemove", "--window", wid, str(target_x), str(target_y), "click", "1"])
+            time.sleep(0.3)
+            # Select All and Copy
+            subprocess.run(["xdotool", "key", "ctrl+a", "ctrl+c"])
+            time.sleep(0.5)
+            print(f"✅ Clicked at ({target_x}, {target_y}) and sent Ctrl+A, Ctrl+C.")
+        else:
+            print("⚠️ Warning: CodeTantra window not found. Please copy manually NOW!")
+            time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ xdotool error: {e}. Falling back to manual clipboard.")
+
     code = get_clipboard().strip()
 
     if not code:
