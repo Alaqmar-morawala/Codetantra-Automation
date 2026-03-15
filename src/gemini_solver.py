@@ -63,23 +63,43 @@ class PdfSolutions:
         # Remove noisy short words and multiple spaces
         query = re.sub(r'\s+', ' ', problem_text.lower().strip())
             
-        clog(f"  [PDF] Searching index for: {query[:50]}...")
+        clog(f"  [PDF] Searching index for identifiers in text ({len(query)} chars)...")
         
-        # 1. Filename Exact Match (High Confidence)
-        # Search for any 'filename' from the index that appears in the raw text
+        # 1. ID/Filename Matching (High Confidence)
         for item in self.index:
             fname = item.get("filename", "")
-            if fname and fname.lower() in query:
-                clog(f"  [PDF] Found filename match: {fname}")
-                return item["code"]
+            if not fname:
+                continue
             
-            # Also try basename
-            basename = os.path.basename(fname)
-            if basename and basename.lower() in query:
-                clog(f"  [PDF] Found basename match: {basename}")
+            fname_lower = fname.lower()
+            basename = os.path.basename(fname_lower)
+            stem = os.path.splitext(basename)[0]
+            
+            # Check for various formats:
+            # - Full path: q11483/CTJ11483.java
+            # - Basename: CTJ11483.java
+            # - Stem: CTJ11483
+            # - Numeric ID: 11483
+            
+            # Extract numbers from stem (e.g., 11483)
+            nums = re.findall(r'\d+', stem)
+            
+            # Match conditions
+            matches = []
+            if fname_lower in query: matches.append("full_path")
+            elif basename in query: matches.append("basename")
+            elif stem in query: matches.append("stem")
+            else:
+                for n in nums:
+                    if len(n) >= 4 and n in query: # Min 4 digits to avoid random number collision
+                        matches.append(f"numeric_id({n})")
+                        break
+            
+            if matches:
+                clog(f"  [PDF] SUCCESS! Found ID match: {fname} via {matches}")
                 return item["code"]
 
-        # 2. Fuzzy Title Match
+        # 2. Fuzzy Title Match (Lower Confidence)
         best_match = None
         highest_ratio = 0.0
         
@@ -96,11 +116,11 @@ class PdfSolutions:
                 highest_ratio = ratio
                 best_match = item
                 
-        if highest_ratio > 0.6: # Relaxed threshold but logged
+        if highest_ratio > 0.65: # Slightly higher threshold for safety
             clog(f"  [PDF] Fuzzy match found: '{best_match.get('title')}' (ratio: {highest_ratio:.2f})")
             return best_match["code"]
             
-        clog("  [PDF] No close match found.")
+        clog("  [PDF] No close match found in manual.")
         return None
 
 
