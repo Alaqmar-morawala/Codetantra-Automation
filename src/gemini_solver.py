@@ -26,6 +26,77 @@ except ImportError:
     sys.exit(1)
 
 
+import difflib
+def clog(msg):
+    print(msg, flush=True)
+
+class PdfSolutions:
+    """Handles lookup in the indexed PDF solutions."""
+
+    def __init__(self, index_path="data/pdf_index.json"):
+        self.index_path = index_path
+        self.index = []
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.index_path):
+            try:
+                with open(self.index_path, "r") as f:
+                    self.index = json.load(f)
+                clog(f"  [PDF] Loaded {len(self.index)} solutions from index.")
+            except Exception as e:
+                clog(f"  [PDF] Error loading index: {e}")
+
+    def find_match(self, problem_text, threshold=0.7):
+        """Find the best matching solution in the PDF index."""
+        if not self.index:
+            return None
+
+        # Clean problem text for matching
+        # Remove noisy short words and multiple spaces
+        query = re.sub(r'\s+', ' ', problem_text.lower().strip())
+            
+        clog(f"  [PDF] Searching index for: {query[:50]}...")
+        
+        # 1. Filename Exact Match (High Confidence)
+        # Search for any 'filename' from the index that appears in the raw text
+        for item in self.index:
+            fname = item.get("filename", "")
+            if fname and fname in query:
+                clog(f"  [PDF] Found filename match: {fname}")
+                return item["code"]
+            
+            # Also try basename
+            basename = os.path.basename(fname)
+            if basename and basename in query:
+                clog(f"  [PDF] Found basename match: {basename}")
+                return item["code"]
+
+        # 2. Fuzzy Title Match
+        best_match = None
+        highest_ratio = 0.0
+        
+        # We search both title and filename for fuzzy matching
+        for item in self.index:
+            title = item.get("title", "")
+            fname = item.get("filename", "")
+            
+            # Combine for better matching
+            search_space = f"{title} {fname}"
+            
+            ratio = difflib.SequenceMatcher(None, query.lower(), search_space.lower()).ratio()
+            if ratio > highest_ratio:
+                highest_ratio = ratio
+                best_match = item
+                
+        if highest_ratio > 0.6: # Relaxed threshold but logged
+            clog(f"  [PDF] Fuzzy match found: '{best_match.get('title')}' (ratio: {highest_ratio:.2f})")
+            return best_match["code"]
+            
+        clog("  [PDF] No close match found.")
+        return None
+
+
 class GeminiSolver:
     """Sends exam questions to Gemini and gets solution code back."""
 
@@ -48,7 +119,7 @@ CRITICAL RULES FOR CODING SOLUTIONS:
 - For C, C++, Java: do NOT add extra spaces or indentation at the start of lines unless inside a block (if/for/while/function body)
 - Keep the code minimal and clean - no blank lines between statements unless necessary"""
 
-    def __init__(self, api_key=None, model="gemini-2.5-flash"):
+    def __init__(self, api_key=None, model="gemini-2.0-flash", index_path="data/pdf_index.json"):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         if not self.api_key:
             raise ValueError(
@@ -56,6 +127,7 @@ CRITICAL RULES FOR CODING SOLUTIONS:
             )
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(model)
+        self.pdf = PdfSolutions(index_path)
 
     def solve(self, raw_text, language_hint=None, max_retries=3):
         """
@@ -69,6 +141,13 @@ CRITICAL RULES FOR CODING SOLUTIONS:
         Returns:
             str: Clean solution code, or None on failure
         """
+        # Phase 1: Try PDF lookup first
+        pdf_code = self.pdf.find_match(raw_text)
+        if pdf_code:
+            return self.clean_code(pdf_code, language_hint)
+
+        # Phase 2: Fallback to Gemini
+        print("  [Gemini] Falling back to AI generation...", flush=True)
         prompt = self.SYSTEM_PROMPT + "\n\n"
         if language_hint:
             prompt += f"Language: {language_hint}\n\n"
