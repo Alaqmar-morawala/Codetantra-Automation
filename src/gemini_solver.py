@@ -27,14 +27,19 @@ except ImportError:
 
 
 import difflib
+# Resolve paths relative to repo root
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SRC_DIR)
+DEFAULT_INDEX_PATH = os.path.join(REPO_ROOT, "data/pdf_index.json")
+
 def clog(msg):
     print(msg, flush=True)
 
 class PdfSolutions:
     """Handles lookup in the indexed PDF solutions."""
 
-    def __init__(self, index_path="data/pdf_index.json"):
-        self.index_path = index_path
+    def __init__(self, index_path=None):
+        self.index_path = index_path or DEFAULT_INDEX_PATH
         self.index = []
         self.load()
 
@@ -45,7 +50,9 @@ class PdfSolutions:
                     self.index = json.load(f)
                 clog(f"  [PDF] Loaded {len(self.index)} solutions from index.")
             except Exception as e:
-                clog(f"  [PDF] Error loading index: {e}")
+                clog(f"  [PDF] ERROR loading index: {e}")
+        else:
+            clog(f"  [PDF] WARNING: Index file not found at {self.index_path}")
 
     def find_match(self, problem_text, threshold=0.7):
         """Find the best matching solution in the PDF index."""
@@ -62,13 +69,13 @@ class PdfSolutions:
         # Search for any 'filename' from the index that appears in the raw text
         for item in self.index:
             fname = item.get("filename", "")
-            if fname and fname in query:
+            if fname and fname.lower() in query:
                 clog(f"  [PDF] Found filename match: {fname}")
                 return item["code"]
             
             # Also try basename
             basename = os.path.basename(fname)
-            if basename and basename in query:
+            if basename and basename.lower() in query:
                 clog(f"  [PDF] Found basename match: {basename}")
                 return item["code"]
 
