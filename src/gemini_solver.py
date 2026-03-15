@@ -217,7 +217,12 @@ CRITICAL RULES FOR CODING SOLUTIONS:
         return text
 
     def clean_code(self, code, language=None):
-        """Post-process code: only strip markdown fences. Keep everything else as-is (v5 behavior)."""
+        """Post-process code: remove markdown fences and dedent common spacing."""
+        import textwrap
+        
+        # Dedent to remove common starting spaces from all lines
+        code = textwrap.dedent(code)
+        
         lines = code.split('\n')
         cleaned = []
 
