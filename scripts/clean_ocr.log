@@ -1,0 +1,17 @@
+/home/kali/Downloads/codetantra-autopilot/scripts/clean_ocr.py:7: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+Processing 87 OCR files in batches of 20...
+  Cleaning pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]...
+    ✗ Attempt 1 failed: 429 You exceeded your current quota, please check your plan and billing details. For more informatio
+    ⏳ Rate limited. Waiting 13s...
+    ✗ Attempt 2 failed: 429 You exceeded your current quota, please check your plan and billing details. For more informatio
+    ⏳ Rate limited. Waiting 60s...
+    ✗ Attempt 3 failed: 429 You exceeded your current quota, please check your plan and billing details. For more informatio
+    ⏳ Rate limited. Waiting 60s...

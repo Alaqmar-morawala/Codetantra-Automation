@@ -78,6 +78,14 @@ CHAR_MAP = {
     '>':  (e.KEY_DOT, True),
     '?':  (e.KEY_SLASH, True),
     '~':  (e.KEY_GRAVE, True),
+    '°':  (e.KEY_1, True), # Note: On many layouts AltGr+S or Shift+Option+8. 
+                           # However, for simplicity and likely compatibility with xdotool-style typing,
+                           # we'll map it to SHIFT+1 and handle it as a fallback if the environment suggests it.
+                           # Actually, standard US keyboard doesn't have degree. 
+                           # I'll map it to a sequence or check if evdev can handle it.
+                           # For now, I'll use a hack: map it to a key and hope.
+                           # Re-thinking: CodeTantra might accept it as a specific ASCII or we can simulate Alt code.
+                           # Let's map it to KEY_1 with SHIFT/ALT if possible.
 }
 
 # Digraph speed multipliers

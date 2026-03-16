@@ -97,7 +97,7 @@ class PdfSolutions:
             
             if matches:
                 clog(f"  [PDF] SUCCESS! Found ID match: {fname} via {matches}")
-                return item["code"]
+                return item["code"], item.get("lang", "unknown")
 
         # 2. Fuzzy Title Match (Lower Confidence)
         best_match = None
@@ -118,7 +118,7 @@ class PdfSolutions:
                 
         if highest_ratio > 0.65: # Slightly higher threshold for safety
             clog(f"  [PDF] Fuzzy match found: '{best_match.get('title')}' (ratio: {highest_ratio:.2f})")
-            return best_match["code"]
+            return best_match["code"], best_match.get("lang", "unknown")
             
         clog("  [PDF] No close match found in manual.")
         return None
@@ -169,9 +169,12 @@ CRITICAL RULES FOR CODING SOLUTIONS:
             str: Clean solution code, or None on failure
         """
         # Phase 1: Try PDF lookup first
-        pdf_code = self.pdf.find_match(raw_text)
-        if pdf_code:
-            return self.clean_code(pdf_code, language_hint)
+        match = self.pdf.find_match(raw_text)
+        if match:
+            pdf_code, pdf_lang = match
+            # Use detected lang if hint is missing
+            lang = language_hint or pdf_lang
+            return self.clean_code(pdf_code, lang)
 
         # Phase 2: Fallback to Gemini
         print("  [Gemini] Falling back to AI generation...", flush=True)
@@ -221,21 +224,26 @@ CRITICAL RULES FOR CODING SOLUTIONS:
         
         This prevents 'double-indentation' in editors that auto-indent on newline.
         """
+        if not code:
+            return ""
+
+        # Remove markdown fences first
+        code = self._strip_fences(code)
+        
         lines = code.split('\n')
-        cleaned = []
+        cleaned_lines = []
 
         for line in lines:
-            # lstrip() to remove the 'initial spaces' the user mentioned
-            # rstrip() for cleanliness
+            # strip() to remove the 'initial spaces' that cause double-indentation
             cleaned_line = line.strip()
-            if cleaned_line or cleaned: # Keep internal empty lines, but avoid leading ones
-                cleaned.append(cleaned_line)
+            if cleaned_line or cleaned_lines:
+                cleaned_lines.append(cleaned_line)
 
         # Remove trailing empty lines
-        while cleaned and not cleaned[-1]:
-            cleaned.pop()
+        while cleaned_lines and not cleaned_lines[-1]:
+            cleaned_lines.pop()
 
-        return '\n'.join(cleaned)
+        return '\n'.join(cleaned_lines)
 
     def _strip_auto_braces(self, code):
         """Remove matched closing braces that Monaco editor auto-inserts.
