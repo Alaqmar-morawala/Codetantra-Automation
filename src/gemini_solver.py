@@ -150,8 +150,9 @@ class PdfSolutions:
             overlap = len(sig_title_words.intersection(query_words))
             ratio = overlap / len(sig_title_words)
             
-            # Require at least 90% of significant title words to be present for robustness
-            if ratio >= 0.9:
+            # Require at least 70% of significant title words to be present for robustness
+            # Lowered from 90% (V7.2) to prevent false negatives, relying on Stage 3 for safety
+            if ratio >= 0.7:
                 fuzzy_candidates.append((item, ratio))
 
         # Merge any ID-based candidates into fuzzy pool for Stage 3 validation
@@ -209,14 +210,47 @@ class PdfSolutions:
                 clog(f"  [PDF] Stage 3 Resolution: Active Tab Detected. Winning candidate: '{best_filename}' (Index: {best_index})")
                 return winner["code"], winner.get("lang", "unknown")
             
-            # Tie-breaker 2: Code context (variable/function names)
-            # Find words in problem text that exist in candidate code
-            query_identifiers = set(re.findall(r'[a-zA-Z_]\w{3,}', query))
+            # Tie-breaker 2: Advanced Semantic Context Matching
+            clog("  [PDF] Stage 3 Resolution: rfind failed. Testing Semantic Context Matcher...")
+            
+            # 1. High priority: Things in backticks or quotes, often representing exact variable/function names
+            explicit_literals = set(re.findall(r'`([^`]+)`', problem_text) + re.findall(r'"([^"]+)"', problem_text) + re.findall(r"'([^']+)'", problem_text))
+            
+            # 2. General identifiers (camelCase, snake_case, or just words)
+            stopwords = {'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'with', 'is', 'are', 'write', 'program', 'function', 'method', 'class', 'using', 'return', 'if', 'else', 'def'}
+            words = set(re.findall(r'\b[a-zA-Z_]\w*\b', problem_text.lower()))
+            identifiers = words - stopwords
+            
+            best_semantic_score = -1
+            best_semantic_candidate = None
+            semantic_tie = False
+            
             for item, score in ambiguous_tier:
-                code_text = item.get("code", "").lower()
-                # Check for explicit function or class names being asked for
-                if "def " in query and "def " in code_text: return item["code"], item.get("lang", "unknown")
-                if "class " in query and "class " in code_text: return item["code"], item.get("lang", "unknown")
+                code_lower = item.get("code", "").lower()
+                sem_score = 0
+                
+                # Triple weight for explicit literals
+                for literal in explicit_literals:
+                    if literal.lower() in code_lower:
+                        sem_score += 3
+                        
+                # Single weight for general identifiers
+                for ident in identifiers:
+                    if re.search(rf'\b{re.escape(ident)}\b', code_lower):
+                        sem_score += 1
+                        
+                clog(f"    Semantic Score for {os.path.basename(item.get('filename', ''))}: {sem_score}")
+                
+                if sem_score > best_semantic_score:
+                    best_semantic_score = sem_score
+                    best_semantic_candidate = item
+                    semantic_tie = False
+                elif sem_score == best_semantic_score:
+                    semantic_tie = True
+            
+            if best_semantic_candidate and not semantic_tie and best_semantic_score > 0:
+                clog(f"  [PDF] Stage 3 Resolution: Semantic Tie-breaker WINNER '{os.path.basename(best_semantic_candidate.get('filename', ''))}' with score {best_semantic_score}. SAFE.")
+                return best_semantic_candidate["code"], best_semantic_candidate.get("lang", "unknown")
             
             # If tie-breakers fail, it is UNSAFE to proceed.
             clog("  [PDF] CRITICAL: Ambiguity unresolved. Tie-breakers failed. SAFE ABORT to Gemini.")
