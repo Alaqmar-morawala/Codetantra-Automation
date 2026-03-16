@@ -54,74 +54,114 @@ class PdfSolutions:
         else:
             clog(f"  [PDF] WARNING: Index file not found at {self.index_path}")
 
-    def find_match(self, problem_text, threshold=0.7):
-        """Find the best matching solution in the PDF index."""
+    def find_match(self, problem_text, threshold=0.75):
+        """Find the best matching solution in the PDF index.
+        
+        V7.1 Features:
+        - Multi-candidate ranking for duplicate titles.
+        - Filename tie-breaking using keywords in problem text.
+        - Higher threshold (0.75) for fuzzy matching.
+        """
         if not self.index:
             return None
 
-        # Clean problem text for matching
-        # Remove noisy short words and multiple spaces
         query = re.sub(r'\s+', ' ', problem_text.lower().strip())
-            
         clog(f"  [PDF] Searching index for identifiers in text ({len(query)} chars)...")
         
-        # 1. ID/Filename Matching (High Confidence)
+        # 1. High Confidence ID/Filename Segment Match
+        candidates = []
         for item in self.index:
             fname = item.get("filename", "")
-            if not fname:
-                continue
+            if not fname: continue
             
-            fname_lower = fname.lower()
-            basename = os.path.basename(fname_lower)
+            basename = os.path.basename(fname).lower()
             stem = os.path.splitext(basename)[0]
             
-            # Check for various formats:
-            # - Full path: q11483/CTJ11483.java
-            # - Basename: CTJ11483.java
-            # - Stem: CTJ11483
-            # - Numeric ID: 11483
-            
-            # Extract numbers from stem (e.g., 11483)
-            nums = re.findall(r'\d+', stem)
-            
-            # Match conditions
-            matches = []
-            if fname_lower in query: matches.append("full_path")
-            elif basename in query: matches.append("basename")
-            elif stem in query: matches.append("stem")
+            # Exact presence checks
+            match_type = None
+            if basename in query: 
+                match_type = "basename"
+            elif stem in query and (len(stem) >= 6 or any(c.isdigit() for c in stem)): 
+                # Avoid greedy matching on common stems like 'data', 'app', 'main'
+                match_type = "stem"
             else:
+                # Numeric ID extraction and check
+                nums = re.findall(r'\d+', stem)
                 for n in nums:
-                    if len(n) >= 4 and n in query: # Min 4 digits to avoid random number collision
-                        matches.append(f"numeric_id({n})")
+                    # Skip common small numbers and greedy matches
+                    if len(n) >= 4 and f" {n}" in f" {query}": 
+                        match_type = f"numeric_id({n})"
                         break
             
-            if matches:
-                clog(f"  [PDF] SUCCESS! Found ID match: {fname} via {matches}")
-                return item["code"], item.get("lang", "unknown")
+            if match_type:
+                candidates.append((item, 1.0, match_type))
 
-        # 2. Fuzzy Title Match (Lower Confidence)
-        best_match = None
-        highest_ratio = 0.0
-        
-        # We search both title and filename for fuzzy matching
+        if candidates:
+            # If multiple candidates exist (e.g. duplicate titles), break tie with filename presence
+            # In ID matching phase, if we found exact basename/stem, we take the FIRST best one
+            # because they are unique enough.
+            best_id_match = candidates[0]
+            clog(f"  [PDF] SUCCESS! Found ID match: {best_id_match[0].get('filename')} via {best_id_match[2]}")
+            return best_id_match[0]["code"], best_id_match[0].get("lang", "unknown")
+
+        # 2. Title Substring & Token Match
+        fuzzy_candidates = []
         for item in self.index:
-            title = item.get("title", "")
-            fname = item.get("filename", "")
+            title = item.get("title", "").lower()
+            if not title: continue
             
-            # Combine for better matching
-            search_space = f"{title} {fname}"
-            
-            ratio = difflib.SequenceMatcher(None, query.lower(), search_space.lower()).ratio()
-            if ratio > highest_ratio:
-                highest_ratio = ratio
-                best_match = item
+            # 2a. Exact Substring Match
+            if title in query:
+                fuzzy_candidates.append((item, 1.0))
+                continue
                 
-        if highest_ratio > 0.65: # Slightly higher threshold for safety
-            clog(f"  [PDF] Fuzzy match found: '{best_match.get('title')}' (ratio: {highest_ratio:.2f})")
-            return best_match["code"], best_match.get("lang", "unknown")
+            # 2b. Token Overlap Match (Handles OCR noise and extra words)
+            title_words = set(re.findall(r'\w+', title))
+            query_words = set(re.findall(r'\w+', query))
             
-        clog("  [PDF] No close match found in manual.")
-        return None
+            if not title_words: continue
+            
+            # Ignore common stop words from the title for scoring
+            stopwords = {'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'with', 'is', 'are', 'write', 'program', 'function'}
+            sig_title_words = title_words - stopwords
+            
+            if not sig_title_words:
+                sig_title_words = title_words # Fallback if only stopwords
+                
+            overlap = len(sig_title_words.intersection(query_words))
+            ratio = overlap / len(sig_title_words)
+            
+            # Require at least 80% of significant title words to be present
+            if ratio >= 0.8:
+                fuzzy_candidates.append((item, ratio))
+
+        if not fuzzy_candidates:
+            clog("  [PDF] No close match found in manual.")
+            return None
+
+        # Sort by ratio descending
+        fuzzy_candidates.sort(key=lambda x: x[1], reverse=True)
+        
+        # Tie-breaking logic for equal (or very close) scores
+        top_score = fuzzy_candidates[0][1]
+        top_tier = [c for c in fuzzy_candidates if top_score - c[1] < 0.05]
+        
+        if len(top_tier) > 1:
+            clog(f"  [PDF] Found {len(top_tier)} similar candidates, attempting filename tie-break...")
+            # Look for filename parts in problem text
+            for item, score in top_tier:
+                fname_parts = re.split(r'[/._]', item.get("filename", "").lower())
+                # Filter out short parts and common extensions
+                significant_parts = [p for p in fname_parts if len(p) > 2 and p not in ('java', 'python', 'py', 'html', 'css')]
+                for part in significant_parts:
+                    if part in query:
+                        clog(f"  [PDF] Tie-break SUCCESS: Match found for '{part}' in '{item.get('filename')}'")
+                        return item["code"], item.get("lang", "unknown")
+
+        # Fallback to the highest score
+        best = fuzzy_candidates[0][0]
+        clog(f"  [PDF] Fuzzy match found: '{best.get('title')}' (ratio: {fuzzy_candidates[0][1]:.2f})")
+        return best["code"], best.get("lang", "unknown")
 
 
 class GeminiSolver:
