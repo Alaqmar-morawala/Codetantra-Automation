@@ -97,12 +97,31 @@ class PdfSolutions:
                 candidates.append((item, 1.0, match_type))
 
         if candidates:
-            # If multiple candidates exist (e.g. duplicate titles), break tie with filename presence
-            # In ID matching phase, if we found exact basename/stem, we take the FIRST best one
-            # because they are unique enough.
-            best_id_match = candidates[0]
-            clog(f"  [PDF] SUCCESS! Found ID match: {best_id_match[0].get('filename')} via {best_id_match[2]}")
-            return best_id_match[0]["code"], best_id_match[0].get("lang", "unknown")
+            # If we have matches here, we check for ambiguity.
+            # Stage 1: Absolute Certainty Check
+            safe_id_candidates = []
+            ambiguous_id_candidates = []
+            
+            for item, score, m_type in candidates:
+                if m_type == "basename":
+                    basename = os.path.basename(item.get("filename", "")).lower()
+                    if len(basename) > 8 and any(c.isdigit() for c in basename):
+                        safe_id_candidates.append((item, score, m_type))
+                    else:
+                        ambiguous_id_candidates.append((item, score, m_type))
+                else:
+                    safe_id_candidates.append((item, score, m_type)) # Stems > 6 or numeric IDs are already filtered for safety
+            
+            if len(safe_id_candidates) == 1:
+                # Absolute certainty achieved
+                best = safe_id_candidates[0]
+                clog(f"  [PDF] Stage 1 Absolute Certainty: {best[0].get('filename')} via {best[2]}")
+                return best[0]["code"], best[0].get("lang", "unknown")
+            elif len(safe_id_candidates) > 1:
+                clog("  [PDF] Stage 2 Ambiguity: Multiple safe IDs found. Reverting to context tie-break.")
+                # We will let it fall through to fuzzy/context check below
+            elif ambiguous_id_candidates:
+                clog(f"  [PDF] Stage 2 Ambiguity: Common basenames found ({len(ambiguous_id_candidates)}). Proceeding to context check.")
 
         # 2. Title Substring & Token Match
         fuzzy_candidates = []
@@ -131,37 +150,81 @@ class PdfSolutions:
             overlap = len(sig_title_words.intersection(query_words))
             ratio = overlap / len(sig_title_words)
             
-            # Require at least 80% of significant title words to be present
-            if ratio >= 0.8:
+            # Require at least 90% of significant title words to be present for robustness
+            if ratio >= 0.9:
                 fuzzy_candidates.append((item, ratio))
 
+        # Merge any ID-based candidates into fuzzy pool for Stage 3 validation
+        if candidates and not fuzzy_candidates:
+             # Default to 0.5 score to force tie-breaking
+             fuzzy_candidates.extend([(item, 0.5) for item, _, _ in candidates])
+        elif candidates:
+             # Boost fuzzy score if they were also an ID candidate
+             id_filenames = {item.get("filename", "") for item, _, _ in candidates}
+             for i in range(len(fuzzy_candidates)):
+                 if fuzzy_candidates[i][0].get("filename", "") in id_filenames:
+                     fuzzy_candidates[i] = (fuzzy_candidates[i][0], fuzzy_candidates[i][1] + 0.5)
+
         if not fuzzy_candidates:
-            clog("  [PDF] No close match found in manual.")
+            clog("  [PDF] Failure: No candidates met the strict requirements. Falling back to Gemini.")
             return None
 
         # Sort by ratio descending
         fuzzy_candidates.sort(key=lambda x: x[1], reverse=True)
         
-        # Tie-breaking logic for equal (or very close) scores
         top_score = fuzzy_candidates[0][1]
-        top_tier = [c for c in fuzzy_candidates if top_score - c[1] < 0.05]
-        
-        if len(top_tier) > 1:
-            clog(f"  [PDF] Found {len(top_tier)} similar candidates, attempting filename tie-break...")
-            # Look for filename parts in problem text
-            for item, score in top_tier:
-                fname_parts = re.split(r'[/._]', item.get("filename", "").lower())
-                # Filter out short parts and common extensions
-                significant_parts = [p for p in fname_parts if len(p) > 2 and p not in ('java', 'python', 'py', 'html', 'css')]
-                for part in significant_parts:
-                    if part in query:
-                        clog(f"  [PDF] Tie-break SUCCESS: Match found for '{part}' in '{item.get('filename')}'")
-                        return item["code"], item.get("lang", "unknown")
+        best_candidate = fuzzy_candidates[0][0]
 
-        # Fallback to the highest score
-        best = fuzzy_candidates[0][0]
-        clog(f"  [PDF] Fuzzy match found: '{best.get('title')}' (ratio: {fuzzy_candidates[0][1]:.2f})")
-        return best["code"], best.get("lang", "unknown")
+        # Stage 3: The Ambiguity Trap and Tie-Breaking
+        # Check if the next best candidate is too close (within 15%)
+        ambiguous_tier = [c for c in fuzzy_candidates if top_score - c[1] < 0.15]
+        
+        if len(ambiguous_tier) > 1:
+            clog(f"  [PDF] Stage 3 Ambiguity Trap: {len(ambiguous_tier)} candidates within 15% margin. Evaluating Active Tab...")
+            
+            # Tie-breaker 1: Active Tab Detection (rfind)
+            # In CodeTantra, if multiple files share a title, the problem text often
+            # prints the name of the currently active tab just before the code editor.
+            # We search backwards to find which candidate's basename appears last (highest index).
+            
+            last_indices = {}
+            for item, score in ambiguous_tier:
+                fname = item.get("filename", "")
+                basename = os.path.basename(fname).lower()
+                
+                # Find the right-most occurrence of the basename as a distinct token
+                # Using regex to ensure we don't match 'app.py' inside 'test_app.py'
+                matches = list(re.finditer(rf'(?<![a-zA-Z0-9_-]){re.escape(basename)}(?![a-zA-Z0-9_-])', query))
+                if matches:
+                    last_indices[item.get("filename", "")] = matches[-1].start()
+                else:
+                    last_indices[item.get("filename", "")] = -1
+            
+            best_filename = max(last_indices, key=last_indices.get)
+            best_index = last_indices[best_filename]
+            
+            if best_index != -1:
+                # Find the item corresponding to the winning filename
+                winner = next(item for item, score in ambiguous_tier if item.get("filename", "") == best_filename)
+                clog(f"  [PDF] Stage 3 Resolution: Active Tab Detected. Winning candidate: '{best_filename}' (Index: {best_index})")
+                return winner["code"], winner.get("lang", "unknown")
+            
+            # Tie-breaker 2: Code context (variable/function names)
+            # Find words in problem text that exist in candidate code
+            query_identifiers = set(re.findall(r'[a-zA-Z_]\w{3,}', query))
+            for item, score in ambiguous_tier:
+                code_text = item.get("code", "").lower()
+                # Check for explicit function or class names being asked for
+                if "def " in query and "def " in code_text: return item["code"], item.get("lang", "unknown")
+                if "class " in query and "class " in code_text: return item["code"], item.get("lang", "unknown")
+            
+            # If tie-breakers fail, it is UNSAFE to proceed.
+            clog("  [PDF] CRITICAL: Ambiguity unresolved. Tie-breakers failed. SAFE ABORT to Gemini.")
+            return None
+
+        # Absolute winner found
+        clog(f"  [PDF] Resolution: Clear winner found '{best_candidate.get('filename')}' (score: {top_score:.2f}). SAFE.")
+        return best_candidate["code"], best_candidate.get("lang", "unknown")
 
 
 class GeminiSolver:
